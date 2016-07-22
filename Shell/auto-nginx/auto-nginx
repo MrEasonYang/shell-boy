@@ -1,0 +1,211 @@
+#! /bin/bash
+
+current_version=
+latest_version=
+distribution=
+install_as_service=
+configure_parameters=
+user=
+group=
+prefix=
+sbin_path=
+modules_path=
+conf_path=
+cc_opt=
+original_sbin_path=
+
+get_shell_config() {
+    IFS=';'$'\n'
+    local config=($(cat config))
+    local line
+    for item in ${config[@]}
+    do
+        IFS=:
+        line=($item)
+        case ${line[0]} in
+            configure-options)
+                configure_parameters=${line[1]}
+                ;;
+            user)
+                user=${line[1]}
+                ;;
+            group)
+                group=${line[1]}
+                ;;
+            prefix)
+                prefix=${line[1]}
+                ;;
+            sbin-path)
+                sbin_path=${line[1]}
+                ;;
+            modules-path)
+                modules_path=${line[1]}
+                ;;
+            conf-path)
+                conf_path=${line[1]}
+                ;;
+            cc-opt)
+                cc_opt=${line[1]}
+                ;;
+            install-as-service)
+                install_as_service=${line[1]}
+                ;;
+            original-sbin-path)
+                original_sbin_path=${line[1]}
+                ;;
+        esac
+    done
+    IFS=$' \t\n'
+}
+
+backup_nginx_config() {
+    cp -r $conf_path/* backup/
+}
+
+recover_nginx_config() {
+    rm -f $conf_path/*
+    cp -r backup/* $conf_path
+}
+
+check_update() {
+    local version_data=$(curl -s http://nginx.org/download/ | awk -F '"' '/nginx/{print $2}' | grep 'tar.gz$'  | awk -F '-' '{print $2}' | awk -F '.' '{printf("%d.%d.%d\n", $1, $2, $3)}')
+    local factor
+    local array
+    local count
+    for item in $version_data
+    do
+        IFS=.
+        array=($item)
+        IFS=$' \t\n'
+        count=0
+        factor=1000000
+        declare -a data
+        for number in ${array[@]}
+        do
+            count=`expr $count + $(( 10#$number )) \* $factor`
+            data+=($count)
+            factor=`expr $factor / 1000`
+        done
+    done
+    get_latest_version $data
+    get_current_version
+    backup_nginx_config
+    if [ "$latest_version" != "$current_version" ];then
+        download_and_install_nginx $latest_version
+    fi
+    recover_nginx_config
+    if systemctl --version | grep -q -i systemd;then
+        systemctl start nginx
+    else
+        /etc/init.d/nginx start
+    fi
+}
+
+get_latest_version() {
+    declare -a sorted_data
+    sorted_data=($(for item in ${data[@]}; do echo $item; done | sort -nur))
+    version_data=${sorted_data[0]}
+    local right=`expr $version_data % 1000`
+    local middle=`expr $version_data / 1000 % 1000`
+    local left=`expr $version_data / 1000000`
+    latest_version="$left.$middle.$right"
+}
+
+get_current_version() {
+    local version=$(nginx -v 2>&1| cut -c22-)
+    if [ x$current_version = x ];then
+        current_version=$version
+    fi
+}
+
+download_and_install_nginx() {
+    curl -s http://nginx.org/download/nginx-${1}.tar.gz -o download/nginx-${1}.tar.gz
+    tar -zxf download/nginx-${1}.tar.gz -C data
+    cd data/nginx-${1}
+    groupadd nginx
+    useradd -s /sbin/nologin -g nginx nginx
+    echo $(pwd)
+    ./configure --user=$user --group=$group --prefix=$prefix --sbin-path=$sbin_path --modules-path=$modules_path --conf-path=$conf_path $configure_parameters --with-cc-opt="$cc_opt"
+    make
+    if ${original_sbin_path}/nginx -v | grep version;then
+        make upgrade
+    else
+        make install
+    fi
+    cd ../..
+    rm download/nginx-${1}.tar.gz
+    rm -rf data/nginx-${1}
+}
+
+yum-dependence() {
+    yum -y update
+    yum -y install gc gcc gcc-c++ autoconf automake libtool make cmake libtool pcre-devel zlib zlib-devel openssl openssl-devel libxml2-devel libxslt-devel gd-devel perl-ExtUtils-Embed GeoIP-devel gperftools gperftools-devel libatomic_ops-devel perl-ExtUtils-Embed
+}
+
+apt-dependence() {
+    apt-get -y update
+    apt-get -y install gcc build-essential libc6 libpcre3 libpcre3-dev libssl-dev zlib1g zlib1g-dev lsb-base openssl libssl-dev libgeoip1 libgeoip-dev google-perftools libgoogle-perftools-dev libperl-dev libgd2-xpm-dev libatomic-ops-dev libxml2-dev libxslt1-dev python-dev
+}
+
+check_distribution() {
+    if cat /etc/*release|grep -q -i centos;then
+        return 1
+    elif cat /etc/*release|grep -q -i rhel;then
+        return 1
+    elif cat /etc/*release|grep -q -i ubuntu;then
+        return 0
+    elif cat /etc/*release|grep -q -i debian;then
+        return 0
+    fi
+}
+
+init_environment() {
+    if [ 1 -eq $distribution ];then
+        yum-dependence
+    elif [ 0 -eq $distribution ];then
+        apt-dependence
+    fi
+}
+
+set_service() {
+    if [ "1" -eq $install_as_service ];then
+        if systemctl --version | grep -q -i systemd;then
+            cp service/systemd /lib/systemd/system/nginx.service
+            chmod +x /lib/systemd/system/nginx.service
+            systemctl daemon-reload
+            systemctl start nginx
+            systemctl enable nginx
+        else
+            cp service/service /etc/init.d/nginx
+            chmod +x /etc/init.d/nginx
+            echo 'service nginx start' >> /etc/rc.local
+            service nginx start
+        fi
+    fi
+}
+
+echo $(date)
+
+check_distribution
+distribution=$?
+case $1 in
+    update)
+        get_shell_config
+        check_update
+        ;;
+    install)
+        get_shell_config
+        init_environment
+        if [ x$2 != x ];then
+            current_version=$2
+            download_and_install_nginx $2
+            set_service
+        else
+            check_update
+        fi
+        ;;
+    *)
+        echo "Please enter a valid command."
+        ;;
+esac
+echo

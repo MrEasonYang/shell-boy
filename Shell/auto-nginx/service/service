@@ -1,0 +1,91 @@
+#! /bin/sh
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+NGINX_PATH=/usr/sbin/nginx
+PID_PATH=/var/run/nginx.pid
+CONFIG_PATH=/etc/nginx/nginx.conf
+
+start() {
+    if netstat -ntlp | grep -q -i nginx;then
+        echo "Nginx is running."
+        exit 0
+    fi
+    
+    $NGINX_PATH -c $CONFIG_PATH
+    if [ "$?" != 0 ] ; then
+        echo "Failed to start nginx."
+        exit 0
+    else
+        echo "Nginx has been successfully started."
+    fi
+}
+
+stop() {
+    if ! netstat -ntlp | grep -q -i nginx; then
+        echo "Nginx is not running."
+        exit 0
+    fi
+    $NGINX_PATH -s stop
+    if [ "$?" != 0 ] ; then
+        kill `pidof nginx`
+        if [ "$?" != 0 ] ; then
+            echo "Failed to stop or kill nginx."
+            exit 0
+        else
+            echo "Nginx process has been successfully killed."
+        fi
+    else
+        echo "Nginx has been successfully stopped."
+    fi
+}
+
+status() {
+    if netstat -ntlp | grep -q -i nginx; then
+        PID=`pidof nginx`
+        echo "Nginx is running."
+    else
+        echo "Nginx is not running."
+        exit 1
+    fi
+}
+
+reload() {
+    if netstat -ntlp | grep -q -i nginx; then
+        $NGINX_PATH -s reload
+        echo "Reloaded."
+    else
+        echo "Failed reload nginx."
+        exit 0
+    fi
+}
+
+test() {
+    $NGINX_PATH -t
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        status
+        ;;
+    restart)
+        stop
+        start
+        ;;
+    reload)
+        reload
+        ;;
+    test)
+        test
+        ;;
+
+    *)
+        echo "Invalid command"
+        exit 0
+esac
+
