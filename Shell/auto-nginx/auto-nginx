@@ -59,12 +59,12 @@ get_shell_config() {
 }
 
 backup_nginx_config() {
-    cp -r $conf_path/* backup/
+    cp -r $prefix/* backup/
 }
 
 recover_nginx_config() {
-    rm -f $conf_path/*
-    cp -r backup/* $conf_path
+    rm -rf $prefix/*
+    cp -r backup/* $prefix
 }
 
 check_update() {
