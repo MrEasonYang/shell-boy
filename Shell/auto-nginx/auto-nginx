@@ -180,6 +180,7 @@ set_service() {
             chmod +x /etc/init.d/nginx
             echo 'service nginx start' >> /etc/rc.local
             service nginx start
+            update-rc.d nginx defaults
         fi
     fi
 }

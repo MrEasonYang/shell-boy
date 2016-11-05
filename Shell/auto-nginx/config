@@ -5,6 +5,6 @@ prefix:/etc/nginx;
 sbin-path:/usr/sbin/nginx;
 modules-path:/usr/lib64/nginx/modules;
 conf-path:/etc/nginx/nginx.conf;
-cc-opt=-O2 -g -pipe -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector-strong --param=ssp-buffer-size=4 -grecord-gcc-switches -mtune=generic;
+cc-opt:-O2 -g -pipe -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector-strong --param=ssp-buffer-size=4 -grecord-gcc-switches -mtune=generic;
 install-as-service:1;
 original-sbin-path:/usr/sbin/nginx;
