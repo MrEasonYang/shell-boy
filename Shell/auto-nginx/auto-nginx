@@ -206,6 +206,14 @@ case $1 in
             set_service
         fi
         ;;
+    reinstall)
+        get_shell_config
+        if [ x$2 != x ];then
+            current_version=$2
+            download_and_install_nginx $2
+            set_service
+        fi
+        ;;
     *)
         echo "Please enter a valid command."
         ;;
