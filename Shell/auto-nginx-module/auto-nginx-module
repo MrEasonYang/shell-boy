@@ -1,0 +1,94 @@
+#! /bin/bash
+
+path=
+distribution=
+libbrotli_path=
+
+get_shell_config() {
+    IFS=';'$'\n'
+    local config=($(cat config))
+    local line
+    for item in ${config[@]}
+    do
+        IFS=:
+        line=($item)
+        case ${line[0]} in
+            module_path)
+                path=${line[1]}
+                ;;
+            libbrotli)
+                libbrotli_path=${line[1]}
+                ;;
+        esac
+    done
+    IFS=$' \t\n'
+}
+
+check_distribution() {
+    if cat /etc/*release|grep -q -i centos;then
+        return 1
+    elif cat /etc/*release|grep -q -i rhel;then
+        return 1
+    elif cat /etc/*release|grep -q -i ubuntu;then
+        return 0
+    elif cat /etc/*release|grep -q -i debian;then
+        return 0
+    fi
+}
+
+yum-dependence() {
+    yum -y update
+    yum -y install git-core autoconf automake libtool
+}
+
+apt-dependence() {
+    apt-get -y update
+    apt-get -y install git-core autoconf automake libtool
+}
+
+init_environment() {
+    check_distribution
+    distribution=$?
+    if [ 1 -eq $distribution ];then
+        yum-dependence
+    elif [ 0 -eq $distribution ];then
+        apt-dependence
+    fi
+    echo $path
+    echo $libbrotli_path
+    if [ ! -d "$path" ]; then
+        mkdir -p $path
+    fi
+    cd $path
+    if [ ! -d "$libbrotli_path" ]; then
+        mkdir -p $libbrotli_path
+    fi
+}
+
+get_shell_config
+init_environment
+
+modules=(
+    "https://github.com/FRiCKLE/ngx_cache_purge.git"
+    "https://github.com/yaoweibin/ngx_http_substitutions_filter_module.git"
+    "https://github.com/cuber/ngx_http_google_filter_module.git"
+    "https://github.com/openresty/echo-nginx-module.git"
+    "https://github.com/grahamedgecombe/nginx-ct.git"
+    "https://github.com/google/ngx_brotli.git"
+)
+
+
+for module in ${modules[@]}
+do
+    git clone $module
+done
+
+cd $libbrotli_path
+git clone https://github.com/bagder/libbrotli
+cd libbrotli
+
+./autogen.sh
+./configure
+make && make install
+ln -s /usr/local/lib/libbrotlienc.so.1 /lib64
+ldconfig

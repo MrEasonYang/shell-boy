@@ -169,6 +169,9 @@ init_environment() {
 
 set_service() {
     if [ "1" -eq $install_as_service ];then
+        if [ ! -d /var/cache/nginx/client_temp ]; then
+            mkdir -p /var/cache/nginx/client_temp
+        fi
         if systemctl --version | grep -q -i systemd;then
             cp service/systemd /lib/systemd/system/nginx.service
             chmod +x /lib/systemd/system/nginx.service
